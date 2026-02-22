@@ -3,6 +3,10 @@
 > **Enterprise Financial RAG Platform** — 100% local inference with `llama3.1:8b` via Ollama + `all-MiniLM-L6-v2` embeddings. Encryption-at-rest, JWT auth, RBAC, and immutable audit trails.
 
 ---
+## 🏗️ System Architecture
+
+<img width="900" height="1200" alt="finsight_v2" src="https://github.com/user-attachments/assets/63175e92-fe15-4b75-b14e-398e2fcab42e" />
+
 
 ## ✨ Features
 
