@@ -1,26 +1,24 @@
 # FinSight AI 📊
 
-> **Enterprise Financial RAG Platform** — 100% local inference with `llama3.1:8b` via Ollama + `all-MiniLM-L6-v2` embeddings. Encryption-at-rest, JWT auth, RBAC, and immutable audit trails.
+> **Enterprise Financial RAG Platform** — 100% local inference with `Qwen 2.5` via Ollama + `all-MiniLM-L6-v2` embeddings. Encryption-at-rest, JWT auth, RBAC, and immutable audit trails with PII sanitization.
 
 ---
+
 ## 🏗️ System Architecture
 
 <img width="900" height="1200" alt="finsight_v2" src="https://github.com/user-attachments/assets/63175e92-fe15-4b75-b14e-398e2fcab42e" />
 
+---
 
-## ✨ Features
+## ✨ Core Security Pillars
 
-| Feature | Details |
-|---------|---------|
-| **100% Local Inference** | `llama3.1:8b` via Ollama — no external API calls needed |
-| **Local Embeddings** | `all-MiniLM-L6-v2` (384-dim) via SentenceTransformers |
-| **Encryption at Rest** | Fernet symmetric encryption for all uploaded documents |
-| **JWT Authentication** | Bearer token auth with configurable expiry |
-| **Role-Based Access** | Admin / Analyst / Viewer roles with action-level permissions |
-| **Immutable Audit Trail** | JSONL audit log (SOC 2 / GDPR compliant) |
-| **Citation-Backed Answers** | `[Chunk X]` citations mapped back to source documents |
-| **Multi-Format Ingestion** | PDF, DOCX, XLSX, CSV, TXT |
-| **React Enterprise UI** | Vite + React SPA with dark financial theme, chat interface, drag-and-drop upload |
+1.  **Encrypted Ingestion (Data-at-Rest)**: Financial documents are encrypted automatically using Fernet (AES-128) during upload and text extraction. Raw data is never exposed on the filesystem.
+2.  **Context-Aware Chunking**: Uses `chunk_size=512` and `chunk_overlap=50` to maintain the integrity of financial line items and prevent data dilution.
+3.  **Sovereign Embeddings & Secure Vector Store**: 384D vectors are generated locally via `all-MiniLM-L6-v2`. **Crucially**, the actual text chunks are NOT stored in the VectorDB; only unencrypted vectors for similarity search are persisted.
+4.  **Precision Retrieval**: The system applies cosine similarity on unencrypted vectors to find the Top-4 chunks. These chunks are then **decrypted in-memory** only when needed by the LLM, ensuring maximum data isolation.
+5.  **Local SLM Implementation (Qwen 2.5)**: High-quality reasoning via local Ollama. This ensures sensitive corporate data stays behind the enterprise firewall.
+6.  **Rigorous Citation Check**: Counteracts hallucination by compelling the model to draw answers exclusively from the provided context using the `[Chunk X]` citation format.
+7.  **Unchanging Audit Trails (PII Sanitized)**: All activities are captured in `rag_audit.log`. To prevent logs from becoming a vulnerability, all user queries are sanitized of PII before logging.
 
 ---
 
@@ -28,13 +26,13 @@
 
 ### Prerequisites
 
-1. **Python 3.11+**
-2. **Node.js 18+** — [download here](https://nodejs.org)
-3. **Ollama** — [download here](https://ollama.ai)
-4. Pull the local SLM:
-   ```bash
-   ollama pull llama3.1:8b
-   ```
+1.  **Python 3.11+**
+2.  **Node.js 18+** — [download here](https://nodejs.org)
+3.  **Ollama** — [download here](https://ollama.ai)
+4.  Pull the local SLM:
+    ```bash
+    ollama pull qwen2.5:7b
+    ```
 
 ### 1. Clone & Install (Backend)
 
@@ -53,6 +51,7 @@ Edit `.env` — **at minimum set**:
 ```env
 SECRET_KEY=<generate a 64-char random hex string>
 ADMIN_PASSWORD=<your secure password>
+OLLAMA_MODEL=qwen2.5:7b
 ```
 
 Generate a secret key:
@@ -74,21 +73,6 @@ uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
 
 Visit **http://localhost:8000/docs** for the interactive Swagger UI.
 
-### 5. Install Frontend Dependencies
-
-```bash
-cd frontend
-npm install
-```
-
-### 6. Start the React Frontend
-
-```bash
-npm run dev
-```
-
-Visit **http://localhost:3000**
-
 ---
 
 ## 🏗️ Architecture
@@ -100,32 +84,11 @@ Visit **http://localhost:3000**
 ```text
 File Upload → Encrypt (Fernet) → Extract Text → Chunk (512/50)
                                                         ↓
-Query → Embed (all-MiniLM-L6-v2) → ChromaDB (cosine, top-4) → [Chunk X] Context
+Query → Embed (all-MiniLM-L6-v2) → ChromaDB (Sovereign Vectors) → [Decrypted In-Memory]
                                                         ↓
-                                          llama3.1:8b (Ollama)
+                                          Qwen 2.5 (Local Ollama)
                                                         ↓
-                                    Citation-backed Answer + Audit Log
-```
-
-### Frontend Architecture
-
-```
-frontend/
-├── index.html                # SPA entry point
-├── package.json              # Node deps (React 18, React Router 7, Vite 6)
-├── vite.config.js            # Dev proxy → FastAPI on :8000
-└── src/
-    ├── main.jsx              # React entry point
-    ├── App.jsx               # Router + auth-gated shell
-    ├── index.css             # Dark enterprise design system
-    ├── api/client.js         # Fetch-based API wrapper (all endpoints)
-    ├── context/AuthContext.jsx   # JWT state, localStorage persistence
-    ├── components/Sidebar.jsx    # Navigation sidebar
-    └── pages/
-        ├── LoginPage.jsx         # Sign in form
-        ├── DocumentsPage.jsx     # Upload + document list + delete
-        ├── QueryPage.jsx         # Chat-style RAG query interface
-        └── AdminPage.jsx         # Stats dashboard + audit log viewer
+                                    Citation-backed Answer + Sanitized Audit Log
 ```
 
 ### Chunking Parameters
@@ -142,19 +105,11 @@ frontend/
 | Layer | Mechanism |
 |-------|-----------|
 | Documents at rest | Fernet AES-128 encryption |
+| Vector Store | sovereign embeddings (no plaintext stored) |
 | API authentication | JWT (HS256, configurable expiry) |
 | Authorization | RBAC (admin / analyst / viewer) |
-| Audit | Append-only JSONL log with rotation |
+| Audit | JSONL log with PII masking |
 | Key storage | `keys/secret.key` (gitignored) |
-
-### Role Permissions
-
-| Action | Admin | Analyst | Viewer |
-|--------|-------|---------|--------|
-| `query` | ✅ | ✅ | ✅ |
-| `ingest` | ✅ | ✅ | ❌ |
-| `delete` | ✅ | ❌ | ❌ |
-| `admin_*` | ✅ | ❌ | ❌ |
 
 ---
 
@@ -189,50 +144,11 @@ pytest tests/test_api.py -v
 
 ---
 
-## 🔨 Frontend Build (Production)
-
-```bash
-cd frontend
-npm run build      # Outputs to frontend/dist/
-npm run preview    # Preview the production build locally
-```
-
----
-
 ## 🐳 Docker
 
 ```bash
 # From project root
 docker compose -f docker/docker-compose.yml up --build
-```
-
-- API: **http://localhost:8000**
-- React Frontend: **http://localhost:3000** (served by Nginx)
-
----
-
-## 📁 Project Structure
-
-```
-finsight_ai/
-├── config/settings.py          # Pydantic settings
-├── src/
-│   ├── security/               # Encryption, JWT, RBAC
-│   ├── audit/                  # Immutable audit logger
-│   ├── ingestion/              # File upload, extraction, chunking
-│   ├── embeddings/             # all-MiniLM-L6-v2 service
-│   ├── vectorstore/            # ChromaDB CRUD
-│   ├── retrieval/              # Cosine similarity retriever
-│   ├── llm/                    # Ollama / Gemini adapter
-│   ├── rag/                    # End-to-end RAG pipeline
-│   └── api/                    # FastAPI routes
-├── frontend/                   # React SPA (Vite)
-│   ├── src/pages/              # Login, Documents, Query, Admin
-│   ├── src/components/         # Sidebar
-│   ├── src/api/                # API client
-│   └── src/context/            # Auth state
-├── tests/                      # pytest suites
-└── docker/                     # Dockerfile + Dockerfile.frontend + nginx.conf + compose
 ```
 
 ---
@@ -242,7 +158,7 @@ finsight_ai/
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `LLM_PROVIDER` | `ollama` | `ollama` or `gemini` |
-| `OLLAMA_MODEL` | `llama3.1:8b` | Ollama model name |
+| `OLLAMA_MODEL` | `qwen2.5:7b` | Ollama model name |
 | `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | SentenceTransformers model |
 | `JWT_EXPIRY_MINUTES` | `60` | Token lifetime |
 | `MAX_FILE_SIZE_MB` | `50` | Upload size limit |
