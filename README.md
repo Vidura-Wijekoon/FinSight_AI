@@ -89,7 +89,11 @@ Visit **http://localhost:3000**
 
 ## 🏗️ Architecture
 
-```
+<p align="center">
+  <img width="900" alt="finsight_v2" src="https://github.com/user-attachments/assets/63175e92-fe15-4b75-b14e-398e2fcab42e" />
+</p>
+
+```text
 File Upload → Encrypt (Fernet) → Extract Text → Chunk (512/50)
                                                         ↓
 Query → Embed (all-MiniLM-L6-v2) → ChromaDB (cosine, top-4) → [Chunk X] Context

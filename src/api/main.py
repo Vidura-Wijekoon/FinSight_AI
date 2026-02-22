@@ -91,6 +91,7 @@ async def lifespan(app: FastAPI):
     retriever = Retriever(
         chroma_store=chroma_store,
         embedding_service=embedding_service,
+        encryption_key=enc_key,
         default_top_k=4,  # per architecture diagram
     )
 

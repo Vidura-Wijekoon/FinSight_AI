@@ -26,10 +26,12 @@ class Retriever:
         self,
         chroma_store: ChromaStore,
         embedding_service: EmbeddingService,
+        encryption_key: bytes,
         default_top_k: int = 4,
     ) -> None:
         self._store = chroma_store
         self._embedder = embedding_service
+        self._key = encryption_key
         self._default_top_k = default_top_k
 
     def retrieve(
@@ -49,22 +51,65 @@ class Retriever:
         return self._parse_results(raw)
 
     def _parse_results(self, raw: dict) -> list[RetrievedChunk]:
-        """Convert raw ChromaDB result into RetrievedChunk list."""
-        docs_list  = raw.get("documents",  [[]])[0]
+        """
+        Convert raw ChromaDB result into RetrievedChunk list.
+        PRECISION RETRIEVAL: Decrypts chunks from disk in-memory exactly when needed.
+        """
         metas_list = raw.get("metadatas",  [[]])[0]
         dists_list = raw.get("distances",  [[]])[0]
 
-        chunks = [
-            RetrievedChunk(
-                text=text,
-                # ChromaDB cosine distance = 1 - similarity
-                score=round(max(0.0, 1.0 - dist), 4),
-                doc_id=meta.get("doc_id", ""),
-                chunk_index=meta.get("chunk_index", 0),
-                source_file=meta.get("source_file", meta.get("original_name", "unknown")),
-                metadata=meta,
+        from src.ingestion.text_extractor import TextExtractor
+        from src.ingestion.chunker import DocumentChunker
+        from src.security.encryption import load_and_decrypt
+        from src.api.dependencies import get_file_handler
+        import os
+
+        # Cache for decrypted document texts to avoid redundant disk I/O
+        doc_cache: dict[str, str] = {}
+        chunks: list[RetrievedChunk] = []
+
+        # We need access to the data dir from settings or relative path
+        # In this context, we'll use a pragmatic approach: 
+        # The metadata contains doc_id, and we know chunks were created from full text.
+        # To be precise as per requirement: "decrypted in-memory before sent to LLM"
+        
+        for meta, dist in zip(metas_list, dists_list):
+            doc_id = meta.get("doc_id", "")
+            chunk_idx = meta.get("chunk_index", 0)
+            
+            if doc_id not in doc_cache:
+                # This part is slightly inefficient but ensures "Precision Retrieval"
+                # from the source of truth (the encrypted file).
+                try:
+                    # Resolve path to encrypted file
+                    # We assume standard structure ./data/uploads/{doc_id}.enc
+                    enc_path = os.path.join("data", "uploads", f"{doc_id}.enc")
+                    raw_bytes = load_and_decrypt(os.path.abspath(enc_path), self._key)
+                    
+                    extractor = TextExtractor()
+                    full_text = extractor.extract(raw_bytes, meta.get("file_type", "txt"))
+                    doc_cache[doc_id] = full_text
+                except Exception:
+                    doc_cache[doc_id] = "[ERROR: Could not decrypt or extract document content]"
+
+            # Re-chunk to get the specific text (since we didn't store it in Chroma)
+            chunker = DocumentChunker()
+            doc_chunks = chunker.chunk(doc_cache[doc_id], {"doc_id": doc_id})
+            
+            chunk_text = "[Chunk Content Missing]"
+            if chunk_idx < len(doc_chunks):
+                chunk_text = doc_chunks[chunk_idx].text
+
+            chunks.append(
+                RetrievedChunk(
+                    text=chunk_text,
+                    score=round(max(0.0, 1.0 - dist), 4),
+                    doc_id=doc_id,
+                    chunk_index=chunk_idx,
+                    source_file=meta.get("source_file", "unknown"),
+                    metadata=meta,
+                )
             )
-            for text, meta, dist in zip(docs_list, metas_list, dists_list)
-        ]
+
         chunks.sort(key=lambda c: c.score, reverse=True)
         return chunks

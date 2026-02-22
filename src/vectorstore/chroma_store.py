@@ -31,12 +31,15 @@ class ChromaStore:
         )
 
     def add_documents(self, doc_id: str, chunks: list[Chunk]) -> int:
-        """Embed and upsert all chunks for a document. Returns chunk count."""
+        """Embed and upsert all chunks for a document. Returns chunk count.
+        STRICT SECURITY: Original plaintext is NOT stored in ChromaDB.
+        Only metadata and embeddings are persisted.
+        """
         if not chunks:
             return 0
         self._collection.upsert(
             ids=[f"{doc_id}_chunk_{c.metadata['chunk_index']}" for c in chunks],
-            documents=[c.text for c in chunks],
+            documents=["" for _ in chunks],  # Never persist plaintext in vector DB
             metadatas=[c.metadata for c in chunks],
         )
         return len(chunks)

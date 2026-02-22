@@ -46,14 +46,27 @@ class AuditLogger:
         detail: dict[str, Any] | None = None,
         level: str = "INFO",
     ) -> None:
-        """Write a structured audit event record."""
+        """
+        Write a structured audit event record.
+        SECURITY: Automatically masks PII like queries and file contents in logs.
+        """
+        # PII Sanitization
+        sanitized_detail = (detail or {}).copy()
+        for pii_field in ["query", "content", "text", "password"]:
+            if pii_field in sanitized_detail:
+                val = str(sanitized_detail[pii_field])
+                if len(val) > 4:
+                    sanitized_detail[pii_field] = f"{val[:2]}...{val[-2:]} [MASKED_PII]"
+                else:
+                    sanitized_detail[pii_field] = "[MASKED_PII]"
+
         record = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "request_id": str(uuid.uuid4()),
             "event": event,
             "user": user,
             "level": level,
-            "detail": detail or {},
+            "detail": sanitized_detail,
         }
         with self._lock:
             self._logger.info(json.dumps(record, default=str))
