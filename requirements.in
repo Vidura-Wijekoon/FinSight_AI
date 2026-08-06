@@ -34,7 +34,7 @@ python-docx>=1.1.0
 openpyxl>=3.1.0
 
 # --- Local embeddings (all-MiniLM-L6-v2, 384-dim) ---
-sentence-transformers>=3.1.0
+sentence-transformers>=5.6.1
 
 # --- Vector store ---
 chromadb>=0.6.0
