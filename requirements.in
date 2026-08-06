@@ -19,7 +19,7 @@ python-multipart>=0.0.20
 
 # --- Configuration ---
 pydantic>=2.10.0
-pydantic-settings>=2.7.0
+pydantic-settings>=2.14.2
 
 # --- Security ---
 cryptography>=44.0.0
