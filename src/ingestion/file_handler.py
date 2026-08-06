@@ -52,7 +52,12 @@ class FileHandler:
         max_bytes = max_size_mb * 1024 * 1024
         if len(raw_bytes) > max_bytes:
             raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                # Literal rather than a Starlette constant. This name has churned
+                # across versions — HTTP_413_CONTENT_TOO_LARGE did not exist in
+                # the pinned Starlette and raised AttributeError here, so
+                # oversized uploads returned 500 instead of 413. The number is
+                # fixed by RFC 9110; the constant's spelling is not.
+                status_code=413,
                 detail=f"File exceeds maximum size of {max_size_mb} MB.",
             )
 

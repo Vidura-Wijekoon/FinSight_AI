@@ -153,11 +153,29 @@ jobs:
 
       # Fails the build on any known advisory affecting a pinned dependency.
       # pip-audit has no severity threshold flag, so severity is applied in the
-      # review of the failure rather than by the tool. Findings that are
-      # accepted rather than fixed belong in an --ignore-vuln entry here, with
-      # the reason in a comment, so that acceptance is explicit and reviewable.
+      # review of the failure rather than by the tool.
+      #
+      # Two advisories are accepted rather than fixed. Neither has a fix
+      # available, and neither is reachable in this deployment. Both must be
+      # re-reviewed if the stated assumption stops holding.
+      #
+      # PYSEC-2026-311 (chromadb): pre-auth code injection via the ChromaDB
+      #   SERVER's HTTP collections endpoint using trust_remote_code. This
+      #   project embeds ChromaDB via PersistentClient and never runs its HTTP
+      #   API or passes trust_remote_code, so the vulnerable surface is absent.
+      #   RE-REVIEW IF: the vector store moves to Chroma server mode.
+      #
+      # PYSEC-2026-1325 (ecdsa, transitive via python-jose): Minerva timing
+      #   attack on P-256 signing, key generation and ECDH. Signature
+      #   VERIFICATION is unaffected, and the project considers side-channel
+      #   attacks out of scope with no planned fix. This service signs JWTs
+      #   with HS256 (HMAC), so no ECDSA code path is exercised.
+      #   RE-REVIEW IF: JWT_ALGORITHM changes to an ES* curve algorithm.
       - name: Audit runtime dependencies
-        run: pip-audit --requirement requirements.txt --strict --progress-spinner off
+        run: |
+          pip-audit --requirement requirements.txt --strict --progress-spinner off \
+            --ignore-vuln PYSEC-2026-311 \
+            --ignore-vuln PYSEC-2026-1325
 
   container:
     name: trivy
@@ -174,8 +192,11 @@ jobs:
       - name: Build API image
         run: docker build -f docker/Dockerfile -t finsight-ai:ci .
 
+      # Tag must carry the 'v' prefix: trivy-action migrated all tags to that
+      # form after a supply-chain incident, and the unprefixed 0.28.0 does not
+      # exist. An unresolvable action fails the job before any step runs.
       - name: Scan image for vulnerabilities
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: finsight-ai:ci
           format: table

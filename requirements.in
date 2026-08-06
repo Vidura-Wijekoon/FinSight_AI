@@ -13,31 +13,31 @@
 # ============================================================
 
 # --- Core API framework ---
-fastapi>=0.115.0
+fastapi>=0.141.1
 uvicorn[standard]>=0.34.0
-python-multipart>=0.0.20
+python-multipart>=0.0.31
 
 # --- Configuration ---
 pydantic>=2.10.0
-pydantic-settings>=2.7.0
+pydantic-settings>=2.14.2
 
 # --- Security ---
-cryptography>=44.0.0
+cryptography>=50.0.0
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
 bcrypt==4.0.1          # pinned exactly: passlib 1.7.4 reads bcrypt.__version__,
                        # removed in bcrypt 4.1. See src/security/auth.py.
 
 # --- Document text extraction ---
-pypdf>=4.0.0
+pypdf>=6.14.2
 python-docx>=1.1.0
 openpyxl>=3.1.0
 
 # --- Local embeddings (all-MiniLM-L6-v2, 384-dim) ---
-sentence-transformers>=3.1.0
+sentence-transformers>=5.7.0
 
 # --- Vector store ---
-chromadb>=0.6.0
+chromadb>=1.5.9
 
 # --- Text chunking ---
 langchain-text-splitters>=0.3.0
