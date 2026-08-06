@@ -17,10 +17,16 @@ services:
       - ../.env
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      # Uses the interpreter already in the image. curl is absent from
+      # python:*-slim, so the previous check could never pass, which left the
+      # container permanently unhealthy and stopped the frontend from starting.
+      # Probes /health (liveness) rather than /ready: a temporarily unreachable
+      # Ollama should not cause the API container to be restarted.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 60s
 
   # ── React frontend (served by Nginx after production build) ─────────────────
   frontend:

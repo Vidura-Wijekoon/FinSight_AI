@@ -2,8 +2,12 @@
 keys/
 .env
 
-# Encrypted document binaries
+# Document data — encrypted binaries and ingestion metadata records.
+# Both directories are created at runtime (src/api/main.py, FileHandler), so
+# neither needs to be committed. The metadata records contain original file
+# names, uploader identity and timestamps, which do not belong in a public repo.
 data/uploads/
+data/processed/
 
 # Vector store
 chroma_db/
@@ -30,6 +34,9 @@ frontend/node_modules/
 frontend/dist/
 frontend/.env.local
 
+# Working notes not intended for publication
+FinSight-Enterprise-Readiness-Agent-Prompt.md
+
 # IDE
 .vscode/
 .idea/
@@ -39,3 +46,6 @@ frontend/.env.local
 # OS
 Thumbs.db
 .DS_Store
+
+# Evaluation reports are run artefacts, not source
+evals/results/

@@ -84,3 +84,101 @@ jobs:
 
       - name: Run test suite
         run: pytest tests/ -v --tb=short --durations=10
+
+  eval:
+    name: retrieval eval
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: lint
+    # Gating on retrieval_precision_at_4 in evals/thresholds.json. The floor
+    # tolerates one query slipping and fails on two — see evals/README.md.
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Cache embedding model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-all-MiniLM-L6-v2-${{ runner.os }}
+
+      # Retrieval metrics only. Generation metrics need a local 7B model, which
+      # a standard runner cannot host, so they stay local — see evals/README.md.
+      - name: Run retrieval evaluation
+        run: python evals/run_eval.py
+
+      - name: Upload evaluation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report
+          path: evals/results/
+          if-no-files-found: warn
+
+  audit:
+    name: pip-audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Independent of lint and test: a vulnerable dependency is worth knowing
+    # about even on a branch that does not compile.
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install pip-audit
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      # Fails the build on any known advisory affecting a pinned dependency.
+      # pip-audit has no severity threshold flag, so severity is applied in the
+      # review of the failure rather than by the tool. Findings that are
+      # accepted rather than fixed belong in an --ignore-vuln entry here, with
+      # the reason in a comment, so that acceptance is explicit and reviewable.
+      - name: Audit runtime dependencies
+        run: pip-audit --requirement requirements.txt --strict --progress-spinner off
+
+  container:
+    name: trivy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # Build only; nothing is pushed from CI. Publication happens on tags in
+      # release.yml. Build context is the repository root, so .dockerignore
+      # applies — that is what keeps keys/ and .env out of the image.
+      - name: Build API image
+        run: docker build -f docker/Dockerfile -t finsight-ai:ci .
+
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: finsight-ai:ci
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"

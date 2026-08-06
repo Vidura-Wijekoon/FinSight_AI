@@ -16,6 +16,7 @@ from src.api.dependencies import (
     get_file_handler,
     require_role,
 )
+from src.api.rate_limit import limiter
 from src.security.auth import UserInDB
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
@@ -33,6 +34,9 @@ class IngestResponse(BaseModel):
 
 
 @router.post("/ingest", response_model=IngestResponse, summary="Ingest a financial document")
+# Encrypting, extracting, chunking and embedding a whole document is unbounded
+# work driven entirely by caller-supplied input.
+@limiter.limit(lambda: get_settings().RATE_LIMIT_INGEST)
 async def ingest_document(
     request: Request,
     file: UploadFile = File(...),
@@ -82,6 +86,9 @@ async def ingest_document(
         base_metadata={
             "doc_id": doc_id,
             "source_file": metadata["original_name"],
+            # Required by the retriever to re-extract the document at query
+            # time. Without it every format was re-parsed as plain text.
+            "file_type": metadata["file_type"],
             "uploaded_by": current_user.username,
         },
     )

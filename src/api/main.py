@@ -3,12 +3,17 @@ FinSight AI — FastAPI Application Entry Point
 Initializes all services at startup via lifespan context manager.
 All service instances are stored in app.state for dependency injection.
 """
+import json
+import logging
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 # ---------------------------------------------------------------------------
 # Ensure project root is on Python path when running from src/api/main.py
@@ -18,13 +23,14 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from config.settings import get_settings
-from src.api.routes import admin, auth, documents, query
+from src.api.rate_limit import limiter, rate_limit_handler
+from src.api.routes import admin, auth, documents, health, query
 from src.audit.audit_logger import AuditLogger
 from src.embeddings.embedding_service import EmbeddingService
 from src.ingestion.file_handler import FileHandler
 from src.llm.llm_service import LLMService
 from src.rag.pipeline import RAGPipeline
-from src.retrieval.retriever import Retriever
+from src.retrieval.retriever import RetrievalError, Retriever
 from src.security.encryption import generate_key, load_key
 from src.vectorstore.chroma_store import ChromaStore
 
@@ -113,7 +119,23 @@ async def lifespan(app: FastAPI):
     app.state.rag_pipeline = rag_pipeline
     app.state.enc_key = enc_key
 
-    audit_logger.log("server_ready", "system", {"llm": llm_service.model_name})
+    # 11. Structured startup record.
+    # This is what an operator reads to confirm they deployed what they think
+    # they deployed — in particular which LLM provider is live, since a remote
+    # one moves document content off the host. Emitted to stdout as well as the
+    # audit log, because in a container the audit file is inside the container.
+    startup_record = {
+        "event": "startup",
+        "version": app.version,
+        "deployment_mode": settings.DEPLOYMENT_MODE,
+        "llm_provider": settings.LLM_PROVIDER,
+        "llm_model": llm_service.model_name,
+        "embedding_model": settings.EMBEDDING_MODEL,
+        "rate_limit_query": settings.RATE_LIMIT_QUERY,
+        "rate_limit_ingest": settings.RATE_LIMIT_INGEST,
+    }
+    logging.getLogger("finsight.startup").info(json.dumps(startup_record))
+    audit_logger.log("server_ready", "system", startup_record)
 
     yield  # Application runs here
 
@@ -137,6 +159,32 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+# Rate limiting. The limiter is registered on app.state because slowapi's
+# middleware looks it up there; the handler adds Retry-After to the 429.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
+app.add_middleware(SlowAPIMiddleware)
+
+
+@app.exception_handler(RetrievalError)
+async def retrieval_error_handler(request, exc: RetrievalError):
+    """
+    Documents matched but could not be read — a fault, not an empty result.
+    Returned as 503 rather than 500 because it is usually a recoverable
+    operational condition: a missing encrypted file, or a key that no longer
+    decrypts it. The detail is deliberately generic; the specific document and
+    reason are in the server log, not in the response.
+    """
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={
+            "detail": (
+                "Matching documents could not be read, so no answer was produced. "
+                "This is a server-side fault; see the service logs."
+            )
+        },
+    )
+
 # CORS — restrict origins in production
 app.add_middleware(
     CORSMiddleware,
@@ -147,6 +195,7 @@ app.add_middleware(
 )
 
 # Include routers
+app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(documents.router)
 app.include_router(query.router)
@@ -155,7 +204,11 @@ app.include_router(admin.router)
 
 @app.get("/", tags=["Health"])
 async def health_check():
-    """Health check endpoint."""
+    """
+    Service banner. Retained for backwards compatibility with existing clients
+    and the current container healthcheck; /health is the liveness probe and
+    /ready is the readiness probe.
+    """
     return {
         "status": "healthy",
         "service": "FinSight AI",

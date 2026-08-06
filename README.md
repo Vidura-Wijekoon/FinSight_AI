@@ -8,14 +8,33 @@
 
 ---
 
+## Project status
+
+This is a **reference implementation and proof of value, not a production
+system**. It demonstrates a specific architecture — retrieval over encrypted
+documents with no data leaving the host — and it works, but several controls a
+regulated deployment would require are absent.
+
+Those gaps are written down rather than left to be discovered:
+**[KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md)** records each one with its
+mechanism and its fix, including retrieval strategy, evaluation coverage, key
+management, authorisation granularity, and the embedding inversion residual
+risk. [SECURITY.md](SECURITY.md) describes the controls that do exist and states
+the boundary of each. [docs/adr/](docs/adr/) records the decisions that were
+hard to reverse, with their unresolved tensions left unresolved —
+[ADR-0001](docs/adr/0001-decrypt-at-point-of-use.md) covers why chunk text is
+decrypted at the point of use rather than indexed.
+
+---
+
 ## ✨ Core Security Pillars
 
 1.  **Encrypted Ingestion (Data-at-Rest)**: Financial documents are encrypted automatically using Fernet (AES-128) during upload and text extraction. Raw data is never exposed on the filesystem.
 2.  **Context-Aware Chunking**: Uses `chunk_size=512` and `chunk_overlap=50` to maintain the integrity of financial line items and prevent data dilution.
-3.  **Sovereign Embeddings & Secure Vector Store**: 384D vectors are generated locally via `all-MiniLM-L6-v2`. **Crucially**, the actual text chunks are NOT stored in the VectorDB; only unencrypted vectors for similarity search are persisted.
+3.  **Sovereign Embeddings & Secure Vector Store**: 384D vectors are generated locally via `all-MiniLM-L6-v2`. **Crucially**, the actual text chunks are NOT stored in the VectorDB; only chunk IDs, unencrypted vectors for similarity search, and metadata are persisted.
 4.  **Precision Retrieval**: The system applies cosine similarity on unencrypted vectors to find the Top-4 chunks. These chunks are then **decrypted in-memory** only when needed by the LLM, ensuring maximum data isolation.
 5.  **Local SLM Implementation (Qwen 2.5)**: High-quality reasoning via local Ollama. This ensures sensitive corporate data stays behind the enterprise firewall.
-6.  **Rigorous Citation Check**: Counteracts hallucination by compelling the model to draw answers exclusively from the provided context using the `[Chunk X]` citation format.
+6.  **Citation Format and Tracking**: The model is instructed to answer only from the supplied context and to cite it in `[Chunk X]` form, and the pipeline records which chunks the answer actually cited. This narrows hallucination but does not prevent it — citations are recorded, not enforced. See [KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md) item 15.
 7.  **Unchanging Audit Trails (PII Sanitized)**: All activities are captured in `rag_audit.log`. To prevent logs from becoming a vulnerability, all user queries are sanitized of PII before logging.
 
 ---
@@ -90,6 +109,21 @@ Query → Embed (all-MiniLM-L6-v2) → ChromaDB (Sovereign Vectors) → [Decrypt
                                     Citation-backed Answer + Sanitized Audit Log
 ```
 
+### What ChromaDB does and does not contain
+
+Stated in text so it is unambiguous regardless of how the diagram renders:
+
+| Persisted in `chroma_db/` | Not persisted in `chroma_db/` |
+|---------------------------|-------------------------------|
+| Chunk IDs (`{doc_id}_chunk_{n}`) | Chunk text, in any form |
+| 384-dimension embedding vectors, unencrypted | Document plaintext |
+| Chunk metadata — `doc_id`, `source_file`, `uploaded_by`, `chunk_index`, `chunk_count`, `chunk_size` | Ciphertext or encryption keys |
+
+Chunk text is reconstructed at query time by decrypting the source document in
+memory. See [ADR-0001](docs/adr/0001-decrypt-at-point-of-use.md) for why, and
+its consequences — including that the metadata above is itself disclosive, since
+`source_file` is the original filename.
+
 ### Chunking Parameters
 | Parameter | Value |
 |-----------|-------|
@@ -116,6 +150,8 @@ Query → Embed (all-MiniLM-L6-v2) → ChromaDB (Sovereign Vectors) → [Decrypt
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
+| `/health` | GET | None | Liveness probe — 200 whenever the process runs; checks no dependencies |
+| `/ready` | GET | None | Readiness probe — 200 only if the vector store, embedding model and LLM are all usable, otherwise 503 with a per-dependency breakdown |
 | `/auth/login` | POST | None | Get JWT token |
 | `/auth/me` | GET | Any | Current user profile |
 | `/auth/refresh` | POST | Any | Refresh token |
@@ -156,7 +192,10 @@ docker compose -f docker/docker-compose.yml up --build
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `LLM_PROVIDER` | `ollama` | `ollama` or `gemini` |
+| `DEPLOYMENT_MODE` | `sovereign` | `sovereign` refuses to start with a remote LLM provider; `hybrid` permits one |
+| `LLM_PROVIDER` | `ollama` | `ollama` or `gemini` — `gemini` requires `DEPLOYMENT_MODE=hybrid` |
+| `RATE_LIMIT_QUERY` | `30/minute` | Per-user limit on `/query` |
+| `RATE_LIMIT_INGEST` | `10/minute` | Per-user limit on `/documents/ingest` |
 | `OLLAMA_MODEL` | `qwen2.5:7b` | Ollama model name |
 | `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | SentenceTransformers model |
 | `JWT_EXPIRY_MINUTES` | `60` | Token lifetime |

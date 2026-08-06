@@ -1,0 +1,41 @@
+version: 2
+
+updates:
+  # Runtime dependencies. Only direct dependencies are pinned in
+  # requirements.txt, so this is where version bumps surface for review.
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "python"]
+    commit-message:
+      prefix: "deps"
+
+  # Workflow actions. Unpinned actions are a supply-chain path into CI, which
+  # holds the credentials used to publish the container image.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "ci"]
+    commit-message:
+      prefix: "ci"
+
+  # Base images for both the API and frontend images.
+  - package-ecosystem: docker
+    directory: "/docker"
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "docker"]
+    commit-message:
+      prefix: "docker"
+
+  - package-ecosystem: npm
+    directory: "/frontend"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "frontend"]
+    commit-message:
+      prefix: "deps"

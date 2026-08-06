@@ -103,6 +103,48 @@ class TestChromaStore:
         for meta in results["metadatas"][0]:
             assert secret not in " ".join(str(v) for v in meta.values())
 
+    def test_stored_vectors_differ_between_chunks(self, chroma_store):
+        """
+        Regression test for the defect where every stored vector was the
+        embedding of the empty string.
+
+        ChromaDB applies its embedding_function to `documents`, and this store
+        blanks `documents` so no plaintext is persisted. Unless embeddings are
+        supplied explicitly, every chunk embeds "" and all vectors become
+        identical — which no other test detects, because results are still
+        returned and scores still fall between 0 and 1.
+        """
+        chroma_store.add_documents("doc-vec", make_chunks("doc-vec", [
+            "Quarterly revenue rose to $450 million on strong cloud demand.",
+            "The board appointed a new chair of the audit committee.",
+        ]))
+
+        stored = chroma_store._collection.get(include=["embeddings"])
+        first, second = stored["embeddings"][0], stored["embeddings"][1]
+
+        # Embeddings are L2-normalised, so the dot product is the cosine.
+        cosine = float(sum(a * b for a, b in zip(first, second, strict=True)))
+        assert cosine < 0.99, (
+            f"stored vectors are near-identical (cosine {cosine:.4f}); "
+            "chunk text was not embedded"
+        )
+
+    def test_retrieval_ranks_by_meaning(self, chroma_store, embedding_service):
+        """
+        The property the whole system depends on: a query must rank the chunk
+        that answers it above one that does not. This fails on a tie-break.
+        """
+        chroma_store.add_documents("doc-rank", make_chunks("doc-rank", [
+            "Total revenue for the quarter was $450.2 million, up 14% year over year.",
+            "The annual general meeting will be held at the registered office in March.",
+            "Employees are reminded to submit expense claims before the month end.",
+        ]))
+
+        results = query_text(chroma_store, embedding_service, "how much revenue did we make", top_k=3)
+        top_index = results["metadatas"][0][0]["chunk_index"]
+
+        assert top_index == 0, "the revenue chunk did not rank first for a revenue query"
+
     def test_delete_removes_chunks(self, chroma_store, embedding_service):
         chunks = make_chunks("doc-del", ["Delete me chunk 1", "Delete me chunk 2"])
         chroma_store.add_documents("doc-del", chunks)
@@ -142,30 +184,58 @@ class TestChromaStore:
         assert final_stats["total_chunks"] == initial_stats["total_chunks"]
 
 
+@pytest.fixture
+def indexed_document(tmp_path, monkeypatch, chroma_store, encryption_key):
+    """
+    Index a document AND write its encrypted source, which is what the retriever
+    actually needs — it reconstructs chunk text by decrypting that file.
+
+    Indexing chunks without the source on disk does not exercise retrieval; it
+    only used to appear to, because unreadable sources were silently replaced
+    with placeholder text.
+    """
+    from src.security.encryption import encrypt_and_save
+
+    monkeypatch.chdir(tmp_path)
+    uploads = tmp_path / "data" / "uploads"
+    uploads.mkdir(parents=True)
+
+    doc_id = "doc-live"
+    text = "\n\n".join([
+        "The company's annual revenue reached 3.2 billion dollars this year, "
+        "driven by sustained demand across every operating region. " * 3,
+        "Operating cash flow was positive at 850 million dollars for the period, "
+        "comfortably covering capital expenditure and interest. " * 3,
+        "The board approved a 500 million dollar share buyback programme, "
+        "citing confidence in the long-term trajectory of the business. " * 3,
+    ])
+    encrypt_and_save(text.encode("utf-8"), uploads / f"{doc_id}.enc", encryption_key)
+
+    chunks = DocumentChunker(chunk_size=512, chunk_overlap=50).chunk(
+        text, {"doc_id": doc_id, "source_file": "live.txt", "file_type": "txt"}
+    )
+    chroma_store.add_documents(doc_id, chunks)
+    return doc_id, len(chunks)
+
+
 class TestRetriever:
-    def test_retrieve_returns_relevant_chunks(self, retriever, chroma_store):
-        chunks = make_chunks("doc-ret", [
-            "The company's annual revenue reached $3.2 billion.",
-            "Operating cash flow was positive at $850 million.",
-            "The board approved a $500M share buyback program.",
-        ])
-        chroma_store.add_documents("doc-ret", chunks)
+    def test_retrieve_returns_relevant_chunks(self, retriever, indexed_document):
         results = retriever.retrieve("annual revenue figures")
         assert len(results) > 0
-        # Top result should be about revenue
         assert results[0].score > 0
+        # Real reconstructed text, not a placeholder.
+        assert "revenue" in results[0].text.lower()
 
-    def test_retrieve_scores_are_valid(self, retriever, chroma_store):
-        chunks = make_chunks("doc-score", ["Earnings per share: $4.20"])
-        chroma_store.add_documents("doc-score", chunks)
-        results = retriever.retrieve("earnings per share")
+    def test_retrieve_scores_are_valid(self, retriever, indexed_document):
+        results = retriever.retrieve("operating cash flow")
+        assert results
         for chunk in results:
             assert 0.0 <= chunk.score <= 1.0
 
-    def test_retrieve_respects_top_k(self, retriever, chroma_store):
-        many_chunks = make_chunks("doc-topk", [f"Financial item number {i}" for i in range(10)])
-        chroma_store.add_documents("doc-topk", many_chunks)
-        results = retriever.retrieve("financial item", top_k=2)
+    def test_retrieve_respects_top_k(self, retriever, indexed_document):
+        _, chunk_count = indexed_document
+        assert chunk_count >= 3, "fixture should produce several chunks"
+        results = retriever.retrieve("share buyback programme", top_k=2)
         assert len(results) <= 2
 
     def test_chunk_text_is_decrypted_from_disk(
@@ -203,3 +273,120 @@ class TestRetriever:
         assert results, "retriever returned no chunks"
         assert "consolidated revenue" in results[0].text
         assert "ERROR" not in results[0].text
+
+    def test_binary_format_is_reconstructed_with_the_right_extractor(
+        self, tmp_path, monkeypatch, chroma_store, retriever, encryption_key
+    ):
+        """
+        Regression test: chunk metadata omitted file_type and the retriever
+        defaulted to 'txt', so container-based formats were decoded as UTF-8 and
+        their raw bytes were handed to the model as document text.
+
+        DOCX is used because python-docx can build one; a ZIP container decoded
+        as text is the same failure as a PDF decoded as text.
+        """
+        import io
+
+        import docx
+
+        from src.ingestion.text_extractor import TextExtractor
+        from src.security.encryption import encrypt_and_save
+
+        monkeypatch.chdir(tmp_path)
+        uploads = tmp_path / "data" / "uploads"
+        uploads.mkdir(parents=True)
+
+        document = docx.Document()
+        for _ in range(6):
+            document.add_paragraph(
+                "Consolidated revenue for fiscal year 2024 was 3.20 billion dollars, "
+                "an increase of 12.4 per cent year over year."
+            )
+        buf = io.BytesIO()
+        document.save(buf)
+        docx_bytes = buf.getvalue()
+
+        doc_id = "doc-docx"
+        encrypt_and_save(docx_bytes, uploads / f"{doc_id}.enc", encryption_key)
+
+        extracted = TextExtractor().extract(docx_bytes, "docx")
+        # file_type is deliberately absent, reproducing the metadata that
+        # ingestion actually wrote. Under the old code this fell back to 'txt'
+        # and the ZIP bytes were decoded as UTF-8.
+        chunks = DocumentChunker(chunk_size=512, chunk_overlap=50).chunk(
+            extracted,
+            {"doc_id": doc_id, "source_file": "fy2024.docx"},
+        )
+        chroma_store.add_documents(doc_id, chunks)
+
+        results = retriever.retrieve("consolidated revenue", top_k=2)
+
+        assert results, "retriever returned no chunks"
+        assert "PK" != results[0].text[:2], "raw ZIP container bytes reached the model"
+        assert "Consolidated revenue" in results[0].text
+
+    def test_unreadable_source_raises_rather_than_answering(
+        self, tmp_path, monkeypatch, chroma_store, retriever
+    ):
+        """
+        A match whose source cannot be decrypted must fail the request. The
+        previous behaviour substituted '[ERROR: Could not decrypt...]' as the
+        chunk text, which was then formatted into the prompt as evidence and
+        could be cited in the answer.
+        """
+        from src.retrieval.retriever import RetrievalError
+
+        monkeypatch.chdir(tmp_path)  # no data/uploads here, so nothing decrypts
+        chroma_store.add_documents(
+            "doc-missing", make_chunks("doc-missing", ["Revenue rose sharply this quarter."])
+        )
+
+        with pytest.raises(RetrievalError, match="none could be read"):
+            retriever.retrieve("revenue", top_k=2)
+
+    def test_unreadable_document_is_excluded_not_substituted(
+        self, tmp_path, monkeypatch, chroma_store, retriever, encryption_key
+    ):
+        """With one readable and one unreadable document, answer from the readable one."""
+        from src.security.encryption import encrypt_and_save
+
+        monkeypatch.chdir(tmp_path)
+        uploads = tmp_path / "data" / "uploads"
+        uploads.mkdir(parents=True)
+
+        readable = "Consolidated revenue for fiscal year 2024 was 3.20 billion dollars. " * 4
+        encrypt_and_save(readable.encode("utf-8"), uploads / "doc-ok.enc", encryption_key)
+        chroma_store.add_documents(
+            "doc-ok",
+            DocumentChunker(512, 50).chunk(
+                readable, {"doc_id": "doc-ok", "source_file": "ok.txt", "file_type": "txt"}
+            ),
+        )
+        # Indexed, but its encrypted file was never written.
+        chroma_store.add_documents(
+            "doc-gone",
+            make_chunks("doc-gone", ["Consolidated revenue figures are discussed here."]),
+        )
+
+        results = retriever.retrieve("consolidated revenue", top_k=4)
+
+        assert results, "readable document should still be returned"
+        assert {c.doc_id for c in results} == {"doc-ok"}
+        for chunk in results:
+            assert "ERROR" not in chunk.text
+            assert "Chunk Content Missing" not in chunk.text
+
+    def test_file_type_falls_back_to_the_source_file_extension(self):
+        """Indexes written before file_type was recorded must still parse."""
+        from src.retrieval.retriever import resolve_file_type
+
+        assert resolve_file_type({"file_type": "pdf"}) == "pdf"
+        assert resolve_file_type({"source_file": "report.PDF"}) == "pdf"
+        assert resolve_file_type({"file_type": "", "source_file": "a.docx"}) == "docx"
+
+    def test_unknown_file_type_raises_rather_than_guessing(self):
+        """Silently assuming 'txt' is what caused the defect this guards."""
+        from src.retrieval.retriever import resolve_file_type
+
+        with pytest.raises(ValueError, match="Cannot determine the file type"):
+            resolve_file_type({"doc_id": "d1", "source_file": "no_extension"})

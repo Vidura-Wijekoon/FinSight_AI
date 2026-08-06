@@ -1,48 +1,67 @@
 # ============================================================
-# FinSight AI — Python Dependencies
+# FinSight AI — pinned runtime dependencies
 # Install: pip install -r requirements.txt
+#
+# Direct dependencies are pinned exactly. Transitive dependencies are left to
+# the resolver deliberately: this project's tree includes torch, whose Linux
+# builds pull CUDA packages that do not exist on Windows. A fully resolved
+# lockfile generated on one platform does not install on the other, and CI and
+# the container image both run Linux while development happens on Windows.
+#
+# The consequence, stated plainly: this gives reproducible DIRECT dependencies,
+# not a reproducible full tree. Closing that gap needs per-platform lockfiles.
+#
+# Versions marked (tested) are the versions the passing test suite ran against.
+# Versions marked (current) are not exercised by any test — see requirements.in.
+#
+# Edit requirements.in to change intent; edit this file to change what installs.
 # ============================================================
 
-# --- Core API Framework ---
-fastapi>=0.115.0
-uvicorn[standard]>=0.34.0
-python-multipart>=0.0.20
+# --- Core API framework ---
+fastapi==0.115.0                    # (tested)
+uvicorn[standard]==0.52.1           # (current) not exercised by tests; TestClient
+                                    # drives the ASGI app directly
+python-multipart==0.0.22            # (tested)
 
 # --- Configuration ---
-pydantic>=2.10.0
-pydantic-settings>=2.7.0
+pydantic==2.11.1                    # (tested)
+pydantic-settings==2.14.1           # (tested)
 
 # --- Security ---
-cryptography>=44.0.0
-python-jose[cryptography]>=3.3.0
-passlib[bcrypt]>=1.7.4
-bcrypt==4.0.1
+cryptography==46.0.5                # (tested)
+python-jose[cryptography]==3.5.0    # (tested)
+passlib[bcrypt]==1.7.4              # (tested)
+bcrypt==4.0.1                       # (tested) do not raise without removing the
+                                    # __version__ shim in src/security/auth.py
 
-# --- Document Text Extraction ---
-pypdf>=4.0.0
-python-docx>=1.1.0
-openpyxl>=3.1.0
+# --- Document text extraction ---
+pypdf==6.9.1                        # (tested)
+python-docx==1.2.0                  # (tested)
+openpyxl==3.1.5                     # (tested)
 
-# --- Local Embeddings (all-MiniLM-L6-v2, 384-dim, ~80 MB download) ---
-sentence-transformers>=3.3.0
+# --- Local embeddings (all-MiniLM-L6-v2, 384-dim) ---
+sentence-transformers==3.1.1        # (tested)
 
-# --- Vector Store ---
-chromadb>=0.6.0
+# --- Vector store ---
+chromadb==1.1.1                     # (tested)
 
-# --- Text Chunking ---
-langchain-text-splitters>=0.3.0
+# --- Text chunking ---
+langchain-text-splitters==1.1.2     # (tested)
 
-# --- LLM: Ollama Python library (local llama3.1 — native SDK, no raw HTTP) ---
-ollama>=0.4.0
+# --- LLM: local Ollama ---
+ollama==0.6.2                       # (current) the generation path is mocked in
+                                    # tests; smoke-test manually after changing
 
-# --- LLM: Gemini (optional cloud fallback) ---
-google-generativeai>=0.8.0
+# --- LLM: Gemini (optional cloud fallback, off by default) ---
+google-generativeai==0.8.6          # (current) not exercised by tests
 
-# --- Frontend (React/Vite — see frontend/package.json) ---
-# requests kept only if needed for backend testing or scripting
-requests>=2.32.0
+# --- HTTP client ---
+requests==2.34.2                    # (tested)
+
+# --- Rate limiting (in-process; deliberately no external store) ---
+slowapi==0.1.9                      # (tested)
 
 # --- Logging ---
-python-json-logger>=3.0.0
+python-json-logger==4.0.0           # (tested)
 
 # --- Testing / linting: see requirements-dev.txt ---

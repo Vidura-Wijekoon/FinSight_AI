@@ -20,6 +20,10 @@ class ChromaStore:
         collection_name: str,
         embedding_service: EmbeddingService,
     ) -> None:
+        # Retained so that add_documents can embed chunk text explicitly.
+        # ChromaDB's embedding_function is applied to whatever is passed as
+        # `documents`, and this store deliberately passes empty strings there.
+        self._embedder = embedding_service
         self._client = chromadb.PersistentClient(
             path=persist_dir,
             settings=ChromaSettings(anonymized_telemetry=False),
@@ -34,11 +38,19 @@ class ChromaStore:
         """Embed and upsert all chunks for a document. Returns chunk count.
         STRICT SECURITY: Original plaintext is NOT stored in ChromaDB.
         Only metadata and embeddings are persisted.
+
+        Embeddings are computed here and passed explicitly. They must NOT be
+        left to ChromaDB's embedding_function, which embeds whatever is in
+        `documents` — and `documents` is deliberately blank so that no plaintext
+        is persisted. Omitting `embeddings` therefore stored the embedding of
+        the empty string for every chunk, making all vectors identical and
+        similarity search an arbitrary tie-break.
         """
         if not chunks:
             return 0
         self._collection.upsert(
             ids=[f"{doc_id}_chunk_{c.metadata['chunk_index']}" for c in chunks],
+            embeddings=self._embedder([c.text for c in chunks]),
             documents=["" for _ in chunks],  # Never persist plaintext in vector DB
             metadatas=[c.metadata for c in chunks],
         )
@@ -67,6 +79,14 @@ class ChromaStore:
         if chunk_ids:
             self._collection.delete(ids=chunk_ids)
         return len(chunk_ids)
+
+    def heartbeat(self) -> int:
+        """
+        Cheap reachability probe for the readiness endpoint. Returns the chunk
+        count. Deliberately not get_stats(), which loads every metadata record
+        and is far too heavy to run on a probe interval.
+        """
+        return self._collection.count()
 
     def get_stats(self) -> dict[str, Any]:
         """Return collection-level statistics."""

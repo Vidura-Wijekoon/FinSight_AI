@@ -1,0 +1,57 @@
+# Build context is the repository root (see docker/docker-compose.yml).
+# docker/Dockerfile runs `COPY . .`, and Docker does NOT honour .gitignore, so
+# without this file the image would contain the encryption key, the .env file,
+# the vector store and every ingested document. The image is published to a
+# public registry, so these exclusions are a security control, not tidiness.
+
+# --- Secrets and key material ---
+.env
+.env.*
+!.env.example
+keys/
+
+# --- Document data and derived stores ---
+# Provided at runtime by volume mounts, never baked into the image.
+data/
+chroma_db/
+logs/
+
+# --- Version control and CI ---
+.git/
+.gitignore
+.github/
+.dockerignore
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Tests and development tooling ---
+# Not needed at runtime; excluding them shrinks the image and its CVE surface.
+tests/
+requirements-dev.txt
+requirements.in
+ruff.toml
+
+# --- Frontend (built by docker/Dockerfile.frontend, not the API image) ---
+frontend/node_modules/
+frontend/dist/
+
+# --- Documentation and repository metadata ---
+*.md
+!README.md
+Architectural_diagram/
+docs/
+
+# --- Editor and OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

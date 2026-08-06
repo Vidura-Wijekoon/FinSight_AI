@@ -1,0 +1,59 @@
+# ============================================================
+# FinSight AI — runtime dependency intent
+#
+# This file records WHICH packages the application needs and the minimum
+# versions it relies on. requirements.txt holds the exact versions that are
+# installed and tested.
+#
+# To review or raise a floor, edit this file. To change what is installed,
+# edit requirements.txt. Dependabot proposes updates against requirements.txt.
+#
+# Direct dependencies are pinned; transitive dependencies are not. See the
+# note at the top of requirements.txt for why.
+# ============================================================
+
+# --- Core API framework ---
+fastapi>=0.115.0
+uvicorn[standard]>=0.34.0
+python-multipart>=0.0.20
+
+# --- Configuration ---
+pydantic>=2.10.0
+pydantic-settings>=2.7.0
+
+# --- Security ---
+cryptography>=44.0.0
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+bcrypt==4.0.1          # pinned exactly: passlib 1.7.4 reads bcrypt.__version__,
+                       # removed in bcrypt 4.1. See src/security/auth.py.
+
+# --- Document text extraction ---
+pypdf>=4.0.0
+python-docx>=1.1.0
+openpyxl>=3.1.0
+
+# --- Local embeddings (all-MiniLM-L6-v2, 384-dim) ---
+sentence-transformers>=3.1.0
+
+# --- Vector store ---
+chromadb>=0.6.0
+
+# --- Text chunking ---
+langchain-text-splitters>=0.3.0
+
+# --- LLM: local Ollama ---
+ollama>=0.4.0          # 0.4 introduced ChatResponse; src/llm/llm_service.py
+                       # reads response.message.content, absent before 0.4.
+
+# --- LLM: Gemini (optional cloud fallback, off by default) ---
+google-generativeai>=0.8.0
+
+# --- HTTP client ---
+requests>=2.32.0
+
+# --- Rate limiting (in-process; deliberately no external store) ---
+slowapi>=0.1.9
+
+# --- Logging ---
+python-json-logger>=3.0.0

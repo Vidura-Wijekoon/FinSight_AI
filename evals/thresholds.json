@@ -1,0 +1,4 @@
+{
+  "_comment": "Measured 0.3125 against a structural ceiling of 0.3281. One query losing its relevant chunk from the top 4 costs 0.25/16 = 0.0156, giving 0.2969; two costs 0.2813. The floor is set to tolerate one such slip and fail on two. Raise it to 0.31 once a Linux CI baseline confirms the measurement. See evals/README.md.",
+  "retrieval_precision_at_4": 0.29
+}

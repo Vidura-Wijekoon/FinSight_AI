@@ -67,6 +67,20 @@ class LLMService:
         )
         return response.text.strip()
 
+    async def health(self) -> bool:
+        """
+        Reachability probe for the readiness endpoint. Lists available models
+        rather than generating, so it costs nothing and loads no weights.
+
+        For a remote provider this is reported as reachable without a call:
+        probing it on an interval would mean regular outbound traffic, which is
+        the opposite of what this system is for.
+        """
+        if self.provider != "ollama":
+            return True
+        await self._ollama_client.list()
+        return True
+
     def build_rag_prompt(self, query: str, chunks: list[RetrievedChunk]) -> str:
         """Build prompt: context chunks with [Chunk X] markers + user question."""
         context_block = "\n\n---\n\n".join(

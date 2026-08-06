@@ -2,10 +2,12 @@
 FinSight AI — Query Route
 POST /query — Submit a question and receive a citation-backed answer from the RAG pipeline.
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
+from config.settings import get_settings
 from src.api.dependencies import get_audit_logger, get_current_user, get_rag_pipeline
+from src.api.rate_limit import limiter
 from src.security.auth import UserInDB
 
 router = APIRouter(prefix="/query", tags=["RAG Query"])
@@ -35,7 +37,12 @@ class QueryResponse(BaseModel):
 
 
 @router.post("", response_model=QueryResponse, summary="Ask a question over ingested documents")
+# Local 7B inference runs on every call, so this is the most expensive endpoint
+# in the system and the cheapest denial-of-service vector. `request` is required
+# by the limiter, which reads the caller identity from it.
+@limiter.limit(lambda: get_settings().RATE_LIMIT_QUERY)
 async def rag_query(
+    request: Request,
     body: QueryRequest,
     current_user: UserInDB = Depends(get_current_user),  # All authenticated users can query
     rag_pipeline=Depends(get_rag_pipeline),
