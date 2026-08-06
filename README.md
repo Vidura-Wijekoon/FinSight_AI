@@ -4,12 +4,6 @@
 
 ---
 
-## 🏗️ System Architecture
-
-<img width="900" alt="FinSight AI system architecture" src="Architectural_diagram/finsight_v2.png" />
-
----
-
 ## ✨ Core Security Pillars
 
 1.  **Encrypted Ingestion (Data-at-Rest)**: Financial documents are encrypted automatically using Fernet (AES-128) during upload and text extraction. Raw data is never exposed on the filesystem.
