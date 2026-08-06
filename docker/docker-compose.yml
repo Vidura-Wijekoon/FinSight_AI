@@ -6,6 +6,9 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+      # Explicit: the Dockerfile is multi-stage and 'builder' carries a compiler
+      # that must not reach a running deployment.
+      target: runtime
     ports:
       - "8000:8000"
     volumes:
