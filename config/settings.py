@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     LLM_PROVIDER: Literal["ollama", "gemini"] = Field("ollama")
     GEMINI_API_KEY: str | None = Field(None)
     OLLAMA_BASE_URL: str = Field("http://localhost:11434")
-    OLLAMA_MODEL: str = Field("llama3.1:8b")
+    OLLAMA_MODEL: str = Field("qwen2.5")
 
     # --- Embedding ---
     EMBEDDING_MODEL: str = Field("all-MiniLM-L6-v2")
