@@ -86,7 +86,7 @@ jobs:
           npx --yes @cyclonedx/cyclonedx-npm --output-file ../sbom-frontend.json
 
       - name: Attach SBOMs to the release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             sbom-python.json
