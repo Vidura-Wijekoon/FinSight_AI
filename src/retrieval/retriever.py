@@ -58,24 +58,25 @@ class Retriever:
         metas_list = raw.get("metadatas",  [[]])[0]
         dists_list = raw.get("distances",  [[]])[0]
 
-        from src.ingestion.text_extractor import TextExtractor
-        from src.ingestion.chunker import DocumentChunker
-        from src.security.encryption import load_and_decrypt
         from pathlib import Path
+
+        from src.ingestion.chunker import DocumentChunker
+        from src.ingestion.text_extractor import TextExtractor
+        from src.security.encryption import load_and_decrypt
 
         # Cache for decrypted document texts to avoid redundant disk I/O
         doc_cache: dict[str, str] = {}
         chunks: list[RetrievedChunk] = []
 
         # We need access to the data dir from settings or relative path
-        # In this context, we'll use a pragmatic approach: 
+        # In this context, we'll use a pragmatic approach:
         # The metadata contains doc_id, and we know chunks were created from full text.
         # To be precise as per requirement: "decrypted in-memory before sent to LLM"
-        
-        for meta, dist in zip(metas_list, dists_list):
+
+        for meta, dist in zip(metas_list, dists_list, strict=False):
             doc_id = meta.get("doc_id", "")
             chunk_idx = meta.get("chunk_index", 0)
-            
+
             if doc_id not in doc_cache:
                 # This part is slightly inefficient but ensures "Precision Retrieval"
                 # from the source of truth (the encrypted file).
@@ -87,7 +88,7 @@ class Retriever:
                     # except below would silently turn into error text.
                     enc_path = Path("data") / "uploads" / f"{doc_id}.enc"
                     raw_bytes = load_and_decrypt(enc_path.resolve(), self._key)
-                    
+
                     extractor = TextExtractor()
                     full_text = extractor.extract(raw_bytes, meta.get("file_type", "txt"))
                     doc_cache[doc_id] = full_text
@@ -97,7 +98,7 @@ class Retriever:
             # Re-chunk to get the specific text (since we didn't store it in Chroma)
             chunker = DocumentChunker()
             doc_chunks = chunker.chunk(doc_cache[doc_id], {"doc_id": doc_id})
-            
+
             chunk_text = "[Chunk Content Missing]"
             if chunk_idx < len(doc_chunks):
                 chunk_text = doc_chunks[chunk_idx].text

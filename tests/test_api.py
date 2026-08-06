@@ -2,8 +2,9 @@
 Tests for FinSight AI — API Endpoints
 Uses FastAPI TestClient with mocked services.
 """
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 from fastapi.testclient import TestClient
 
 

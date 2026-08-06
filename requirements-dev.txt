@@ -1,0 +1,17 @@
+# ============================================================
+# FinSight AI — Development Dependencies
+# Install: pip install -r requirements.txt -r requirements-dev.txt
+#
+# Runtime dependencies live in requirements.txt. Nothing here is imported by
+# the application, and nothing here is installed into the container image.
+# ============================================================
+
+# --- Testing ---
+pytest>=8.0.0
+pytest-asyncio>=0.25.0
+
+# --- Linting ---
+ruff>=0.11.0
+
+# --- Supply chain (see SECURITY.md) ---
+pip-audit>=2.7.0

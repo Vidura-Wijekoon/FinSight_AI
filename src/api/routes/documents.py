@@ -46,8 +46,8 @@ async def ingest_document(
     Upload → encrypt → extract text → chunk → embed → store in ChromaDB.
     Requires analyst or admin role.
     """
-    from src.ingestion.text_extractor import TextExtractor
     from src.ingestion.chunker import DocumentChunker
+    from src.ingestion.text_extractor import TextExtractor
 
     # 1. Validate, encrypt, save
     metadata = await file_handler.handle_upload(

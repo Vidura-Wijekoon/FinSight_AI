@@ -18,6 +18,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from config.settings import get_settings
+from src.api.routes import admin, auth, documents, query
 from src.audit.audit_logger import AuditLogger
 from src.embeddings.embedding_service import EmbeddingService
 from src.ingestion.file_handler import FileHandler
@@ -26,7 +27,6 @@ from src.rag.pipeline import RAGPipeline
 from src.retrieval.retriever import Retriever
 from src.security.encryption import generate_key, load_key
 from src.vectorstore.chroma_store import ChromaStore
-from src.api.routes import auth, documents, query, admin
 
 
 # ---------------------------------------------------------------------------

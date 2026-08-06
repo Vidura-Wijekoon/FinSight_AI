@@ -11,8 +11,8 @@ from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 
 from config.settings import get_settings
-from src.security.auth import Token, UserInDB, authenticate_user, create_access_token
 from src.api.dependencies import get_current_user
+from src.security.auth import Token, UserInDB, authenticate_user, create_access_token
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 settings = get_settings()

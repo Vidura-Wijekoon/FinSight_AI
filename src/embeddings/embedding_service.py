@@ -4,7 +4,7 @@ Local embeddings via SentenceTransformers (all-MiniLM-L6-v2, 384-dim).
 Implements ChromaDB EmbeddingFunction interface for direct integration.
 No external API calls — fully local.
 """
-from chromadb import EmbeddingFunction, Documents, Embeddings
+from chromadb import Documents, EmbeddingFunction, Embeddings
 from sentence_transformers import SentenceTransformer
 
 

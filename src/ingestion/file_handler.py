@@ -5,11 +5,11 @@ document listing, and deletion.
 """
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import UploadFile, HTTPException, status
+from fastapi import HTTPException, UploadFile, status
 
 from src.security.encryption import encrypt_and_save, load_and_decrypt
 
@@ -70,7 +70,7 @@ class FileHandler:
             "file_type": suffix.lstrip("."),
             "size_bytes": len(raw_bytes),
             "uploaded_by": user,
-            "uploaded_at": datetime.now(timezone.utc).isoformat(),
+            "uploaded_at": datetime.now(UTC).isoformat(),
             "status": "uploaded",
             "chunk_count": 0,
         }

@@ -4,7 +4,6 @@ Provides reusable dependencies for auth, service access, and RBAC.
 """
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
-
 from jose import JWTError
 
 from src.security.auth import TokenData, UserInDB, decode_access_token, get_user
@@ -26,7 +25,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> UserInDB:
     try:
         token_data: TokenData = decode_access_token(token)
     except JWTError:
-        raise credentials_exception
+        # `from None` is deliberate: chaining the JWTError would attach token
+        # parsing detail to the 401 traceback. The client is told only that the
+        # token is invalid.
+        raise credentials_exception from None
 
     user = get_user(token_data.username)
     if user is None or user.disabled:

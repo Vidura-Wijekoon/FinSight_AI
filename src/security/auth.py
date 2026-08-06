@@ -3,20 +3,19 @@ FinSight AI — JWT Authentication Module
 Handles user model, password hashing, and JWT token lifecycle.
 Users are stored in-memory seeded from settings (production: replace with DB).
 """
-from datetime import datetime, timedelta, timezone
-from typing import Optional
-
-from jose import JWTError, jwt
-from passlib.context import CryptContext
-from pydantic import BaseModel
-
-from config.settings import get_settings
+from datetime import UTC, datetime, timedelta
 
 # ---------------------------------------------------------------------------
 # Compatibility patch: passlib 1.7.4 reads bcrypt.__version__ which was
 # removed in bcrypt 4.0.  Inject a shim so passlib doesn't raise AttributeError.
 # ---------------------------------------------------------------------------
 import bcrypt as _bcrypt
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from pydantic import BaseModel
+
+from config.settings import get_settings
+
 if not hasattr(_bcrypt, "__version__"):
     _bcrypt.__version__ = "4.0.0"
 
@@ -76,7 +75,7 @@ def _seed_admin() -> None:
 _seed_admin()
 
 
-def get_user(username: str) -> Optional[UserInDB]:
+def get_user(username: str) -> UserInDB | None:
     return _USERS_DB.get(username)
 
 
@@ -91,7 +90,7 @@ def add_user(username: str, password: str, role: str = "viewer") -> UserInDB:
     return user
 
 
-def authenticate_user(username: str, password: str) -> Optional[UserInDB]:
+def authenticate_user(username: str, password: str) -> UserInDB | None:
     """Validate credentials; return UserInDB or None."""
     user = get_user(username)
     if user is None or user.disabled:
@@ -104,9 +103,9 @@ def authenticate_user(username: str, password: str) -> Optional[UserInDB]:
 # ---------------------------------------------------------------------------
 # JWT token lifecycle
 # ---------------------------------------------------------------------------
-def create_access_token(username: str, role: str, expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(username: str, role: str, expires_delta: timedelta | None = None) -> str:
     """Encode a signed JWT containing username and role."""
-    expire = datetime.now(timezone.utc) + (
+    expire = datetime.now(UTC) + (
         expires_delta or timedelta(minutes=settings.JWT_EXPIRY_MINUTES)
     )
     payload = {"sub": username, "role": role, "exp": expire}

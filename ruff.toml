@@ -1,0 +1,44 @@
+# FinSight AI — lint configuration
+# Kept deliberately close to ruff's defaults. Suppressions are per-path and
+# justified, so that `ruff check .` staying green remains meaningful.
+
+target-version = "py311"
+line-length = 110
+
+exclude = [
+    "frontend",
+    "chroma_db",
+    "data",
+    "logs",
+    ".venv",
+]
+
+[lint]
+# E/W pycodestyle, F pyflakes, I import order, B bugbear, UP pyupgrade.
+select = ["E", "W", "F", "I", "B", "UP"]
+
+[lint.flake8-bugbear]
+# B008 flags function calls in argument defaults. That is precisely how FastAPI
+# declares dependencies and uploads, so these calls are exempted by name rather
+# than disabling the rule, which still catches genuine mutable-default bugs.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.File",
+    "fastapi.Form",
+    "fastapi.Query",
+    "src.api.dependencies.require_role",
+]
+
+[lint.per-file-ignores]
+# src/api/main.py inserts the project root on sys.path before importing any
+# first-party module, so that `python src/api/main.py` works as well as
+# `uvicorn src.api.main:app`. The imports cannot precede that bootstrap.
+"src/api/main.py" = ["E402"]
+
+# Retriever imports inside _parse_results to avoid a circular import with
+# src.api.dependencies at module load time.
+"src/retrieval/retriever.py" = ["E402"]
+
+# Tests import lazily inside fixtures so that collection stays fast and a
+# missing optional dependency fails one test rather than the whole session.
+"tests/*" = ["E402"]

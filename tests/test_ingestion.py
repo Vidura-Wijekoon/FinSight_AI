@@ -2,10 +2,8 @@
 Tests for FinSight AI — Ingestion Pipeline
 """
 import io
-import json
-import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
@@ -26,7 +24,6 @@ class TestTextExtractor:
 
     def test_extract_pdf(self):
         """Minimal PDF with extractable text."""
-        import pypdf
         from pypdf import PdfWriter
 
         writer = PdfWriter()

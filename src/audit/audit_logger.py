@@ -7,7 +7,7 @@ import json
 import logging
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
@@ -61,7 +61,7 @@ class AuditLogger:
                     sanitized_detail[pii_field] = "[MASKED_PII]"
 
         record = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "request_id": str(uuid.uuid4()),
             "event": event,
             "user": user,
@@ -122,7 +122,7 @@ class AuditLogger:
         if not self._log_path.exists():
             return {"total_entries": 0, "log_size_bytes": 0}
         content = self._log_path.read_text(encoding="utf-8")
-        lines = [l for l in content.splitlines() if l.strip()]
+        lines = [line for line in content.splitlines() if line.strip()]
         return {
             "total_entries": len(lines),
             "log_size_bytes": self._log_path.stat().st_size,
