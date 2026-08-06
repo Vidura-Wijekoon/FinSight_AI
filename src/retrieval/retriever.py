@@ -61,8 +61,7 @@ class Retriever:
         from src.ingestion.text_extractor import TextExtractor
         from src.ingestion.chunker import DocumentChunker
         from src.security.encryption import load_and_decrypt
-        from src.api.dependencies import get_file_handler
-        import os
+        from pathlib import Path
 
         # Cache for decrypted document texts to avoid redundant disk I/O
         doc_cache: dict[str, str] = {}
@@ -83,8 +82,11 @@ class Retriever:
                 try:
                     # Resolve path to encrypted file
                     # We assume standard structure ./data/uploads/{doc_id}.enc
-                    enc_path = os.path.join("data", "uploads", f"{doc_id}.enc")
-                    raw_bytes = load_and_decrypt(os.path.abspath(enc_path), self._key)
+                    # NOTE: load_and_decrypt calls .exists(), so this must be a
+                    # Path — passing a str raises AttributeError, which the
+                    # except below would silently turn into error text.
+                    enc_path = Path("data") / "uploads" / f"{doc_id}.enc"
+                    raw_bytes = load_and_decrypt(enc_path.resolve(), self._key)
                     
                     extractor = TextExtractor()
                     full_text = extractor.extract(raw_bytes, meta.get("file_type", "txt"))

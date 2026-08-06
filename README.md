@@ -1,5 +1,9 @@
 # FinSight AI 📊
 
+[![CI](https://github.com/Vidura-Wijekoon/FinSight_AI/actions/workflows/ci.yml/badge.svg)](https://github.com/Vidura-Wijekoon/FinSight_AI/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+
 > **Enterprise Financial RAG Platform** — 100% local inference with `Qwen 2.5` via Ollama + `all-MiniLM-L6-v2` embeddings. Encryption-at-rest, JWT auth, RBAC, and immutable audit trails with PII sanitization.
 
 ---
@@ -31,14 +35,15 @@
 ### 1. Clone & Install (Backend)
 
 ```bash
-cd "v:/AI Enterprise Knowledge/Projects/FinSight_AI"
+git clone https://github.com/Vidura-Wijekoon/FinSight_AI.git
+cd FinSight_AI
 pip install -r requirements.txt
 ```
 
 ### 2. Configure Environment
 
 ```bash
-copy .env.example .env
+cp .env.example .env        # Windows: copy .env.example .env
 ```
 
 Edit `.env` — **at minimum set**:
@@ -156,6 +161,12 @@ docker compose -f docker/docker-compose.yml up --build
 | `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | SentenceTransformers model |
 | `JWT_EXPIRY_MINUTES` | `60` | Token lifetime |
 | `MAX_FILE_SIZE_MB` | `50` | Upload size limit |
+
+---
+
+## 📄 License
+
+Licensed under the Apache License, Version 2.0 — see [LICENSE](LICENSE) for the full text.
 
 ---
 

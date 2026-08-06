@@ -52,7 +52,7 @@ class FileHandler:
         max_bytes = max_size_mb * 1024 * 1024
         if len(raw_bytes) > max_bytes:
             raise HTTPException(
-                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                 detail=f"File exceeds maximum size of {max_size_mb} MB.",
             )
 

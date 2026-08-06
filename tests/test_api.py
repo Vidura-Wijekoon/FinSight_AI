@@ -3,7 +3,7 @@ Tests for FinSight AI — API Endpoints
 Uses FastAPI TestClient with mocked services.
 """
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 
 
@@ -15,11 +15,13 @@ def client():
     """
     Create TestClient with all heavy services mocked at app.state level.
     This avoids loading SentenceTransformers + ChromaDB + Ollama in CI.
-    """
-    # Patch settings to avoid requiring .env file
-    with patch("config.settings.Settings._settings_build_values", return_value={}):
-        pass
 
+    NOTE: TestClient is deliberately NOT used as a context manager. Entering the
+    context runs the app's lifespan, which builds the *real* EmbeddingService,
+    ChromaStore and LLMService before any mock can be injected. Routes resolve
+    their services from `request.app.state` (see src/api/dependencies.py), so
+    populating app.state directly is sufficient — and keeps the suite hermetic.
+    """
     from src.api.main import app
 
     # Inject mock services into app.state before test
@@ -51,16 +53,16 @@ def client():
         }],
         chunks_used=1,
         latency_ms=250.0,
-        model_used="llama3.1:8b",
+        model_used="qwen2.5",
         query="What was the revenue growth?",
     ))
 
-    with TestClient(app, raise_server_exceptions=True) as c:
-        app.state.audit_logger = mock_audit
-        app.state.file_handler = mock_file_handler
-        app.state.chroma_store = mock_chroma
-        app.state.rag_pipeline = mock_rag
-        yield c
+    app.state.audit_logger = mock_audit
+    app.state.file_handler = mock_file_handler
+    app.state.chroma_store = mock_chroma
+    app.state.rag_pipeline = mock_rag
+
+    yield TestClient(app, raise_server_exceptions=True)
 
 
 @pytest.fixture(scope="module")
