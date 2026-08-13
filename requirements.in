@@ -25,7 +25,7 @@ pydantic-settings>=2.14.2
 cryptography>=50.0.0
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
-bcrypt==4.0.1          # pinned exactly: passlib 1.7.4 reads bcrypt.__version__,
+bcrypt==5.0.0          # pinned exactly: passlib 1.7.4 reads bcrypt.__version__,
                        # removed in bcrypt 4.1. See src/security/auth.py.
 
 # --- Document text extraction ---
