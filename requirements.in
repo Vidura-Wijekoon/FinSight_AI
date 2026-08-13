@@ -53,7 +53,7 @@ google-generativeai>=0.8.0
 requests>=2.32.0
 
 # --- Rate limiting (in-process; deliberately no external store) ---
-slowapi>=0.1.9
+slowapi>=0.1.10
 
 # --- Logging ---
 python-json-logger>=3.0.0
